@@ -11,12 +11,25 @@ import {
 } from './auth'
 import type { User, ChangePasswordRequest, NotifyEmailEntry, UserAuthProvider } from '@/types'
 
+export interface UserBalanceSummary {
+  balance: number
+}
+
 /**
  * Get current user profile
  * @returns User profile data
  */
 export async function getProfile(): Promise<User> {
   const { data } = await apiClient.get<User>('/user/profile')
+  return data
+}
+
+/**
+ * Get current user balance summary
+ * @returns Balance, concurrency and status for current user
+ */
+export async function getBalance(): Promise<UserBalanceSummary> {
+  const { data } = await apiClient.get<UserBalanceSummary>('/user/balance')
   return data
 }
 
@@ -169,6 +182,7 @@ export async function startOAuthBinding(
 }
 
 export const userAPI = {
+  getBalance,
   getProfile,
   updateProfile,
   changePassword,

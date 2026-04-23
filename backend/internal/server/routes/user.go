@@ -23,6 +23,7 @@ func RegisterUserRoutes(
 		user := authenticated.Group("/user")
 		{
 			user.GET("/profile", h.User.GetProfile)
+			user.GET("/balance", h.User.GetBalance)
 			user.PUT("/password", h.User.ChangePassword)
 			user.PUT("", h.User.UpdateProfile)
 			user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
