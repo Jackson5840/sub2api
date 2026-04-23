@@ -3801,13 +3801,16 @@ export default {
           queryPlaceholder: 'Search request text / response text / request_id'
         },
         table: {
+          user: 'User',
           time: 'Time',
           model: 'Model',
           requestText: 'Input Preview',
           responseText: 'Output Preview',
+          usageCost: 'Tokens / Cost',
           requestId: 'Request ID'
         },
         detailTitle: 'Detail Sidebar',
+        detailTitleShort: 'Details',
         detail: {
           requestId: 'Request ID',
           clientRequestId: 'Client Request ID',

@@ -101,8 +101,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700">
+      <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <div class="text-sm font-bold text-gray-900 dark:text-white">
               {{ t('admin.ops.requestTranscripts.listTitle') }}
@@ -130,6 +129,9 @@
               <thead class="bg-gray-50 dark:bg-dark-900">
                 <tr>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestTranscripts.table.user') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     {{ t('admin.ops.requestTranscripts.table.time') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -142,6 +144,9 @@
                     {{ t('admin.ops.requestTranscripts.table.responseText') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestTranscripts.table.usageCost') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     {{ t('admin.ops.requestTranscripts.table.requestId') }}
                   </th>
                 </tr>
@@ -152,9 +157,13 @@
                   v-for="log in logs"
                   :key="log.id"
                   class="cursor-pointer bg-white transition-colors hover:bg-gray-50 dark:bg-dark-800 dark:hover:bg-dark-700/60"
-                  :class="selectedLog?.id === log.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''"
-                  @click="selectedLog = log"
+                  @click="openDetail(log)"
                 >
+                  <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
+                    <div class="max-w-[180px] truncate font-medium" :title="userLabel(log)">
+                      {{ userLabel(log) }}
+                    </div>
+                  </td>
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ formatDateTime(log.created_at) }}
                   </td>
@@ -170,6 +179,14 @@
                   <td class="max-w-[280px] px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     <div class="line-clamp-3 whitespace-pre-wrap break-words">
                       {{ previewText(responseText(log)) || '-' }}
+                    </div>
+                  </td>
+                  <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+                    <div class="font-medium text-gray-800 dark:text-gray-100">
+                      {{ formatTokenCount(totalTokens(log)) }}
+                    </div>
+                    <div class="mt-1 text-[11px] text-gray-400">
+                      ${{ formatCost(totalCost(log)) }}
                     </div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
@@ -194,15 +211,18 @@
               @update:pageSize="handlePageSizeChange"
             />
           </div>
-        </div>
+      </div>
 
-        <aside class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700 xl:sticky xl:top-6 xl:h-fit">
-          <template v-if="selectedLog">
+      <BaseDialog
+        :show="detailOpen && !!selectedLog"
+        :title="t('admin.ops.requestTranscripts.detailTitleShort')"
+        width="extra-wide"
+        :close-on-click-outside="true"
+        @close="closeDetail"
+      >
+        <template v-if="selectedLog">
             <div class="flex items-start justify-between gap-3">
               <div>
-                <div class="text-lg font-black text-gray-900 dark:text-white">
-                  {{ t('admin.ops.requestTranscripts.detailTitle') }}
-                </div>
                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {{ formatDateTime(selectedLog.created_at) }}
                 </div>
@@ -219,6 +239,46 @@
             </div>
 
             <div class="mt-6 grid grid-cols-1 gap-3">
+              <div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <div class="text-sm font-bold text-gray-900 dark:text-white">
+                    {{ t('admin.ops.requestTranscripts.detail.requestText') }}
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :disabled="!requestText(selectedLog)"
+                    @click="copyToClipboard(requestText(selectedLog), t('admin.ops.requestTranscripts.requestTextCopied'))"
+                  >
+                    {{ t('admin.ops.requestTranscripts.copyRequestText') }}
+                  </button>
+                </div>
+                <div v-if="extraBool(selectedLog, 'request_text_truncated')" class="mb-2 text-[11px] text-yellow-600 dark:text-yellow-400">
+                  {{ t('admin.ops.requestTranscripts.detail.requestTextTruncated') }}
+                </div>
+                <pre class="max-h-[260px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"><code>{{ requestText(selectedLog) || '—' }}</code></pre>
+              </div>
+
+              <div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <div class="text-sm font-bold text-gray-900 dark:text-white">
+                    {{ t('admin.ops.requestTranscripts.detail.responseText') }}
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :disabled="!responseText(selectedLog)"
+                    @click="copyToClipboard(responseText(selectedLog), t('admin.ops.requestTranscripts.responseTextCopied'))"
+                  >
+                    {{ t('admin.ops.requestTranscripts.copyResponseText') }}
+                  </button>
+                </div>
+                <div v-if="extraBool(selectedLog, 'response_text_truncated')" class="mb-2 text-[11px] text-yellow-600 dark:text-yellow-400">
+                  {{ t('admin.ops.requestTranscripts.detail.responseTextTruncated') }}
+                </div>
+                <pre class="max-h-[320px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"><code>{{ responseText(selectedLog) || '—' }}</code></pre>
+              </div>
+
               <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.requestId') }}</div>
                 <div class="mt-1 break-all font-mono text-sm text-gray-900 dark:text-white">{{ selectedLog.request_id || '—' }}</div>
@@ -262,6 +322,41 @@
                 </div>
               </div>
 
+              <template v-if="hasUsageMetrics(selectedLog)">
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.totalTokens') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">{{ formatTokenCount(totalTokens(selectedLog)) }}</div>
+                  </div>
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.totalCost') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">${{ formatCost(totalCost(selectedLog)) }}</div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.inputTokens') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">{{ formatTokenCount(extraNumber(selectedLog, 'input_tokens')) }}</div>
+                  </div>
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.outputTokens') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">{{ formatTokenCount(extraNumber(selectedLog, 'output_tokens')) }}</div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.cacheCreationTokens') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">{{ formatTokenCount(extraNumber(selectedLog, 'cache_creation_tokens')) }}</div>
+                  </div>
+                  <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.cacheReadTokens') }}</div>
+                    <div class="mt-1 text-sm text-gray-900 dark:text-white">{{ formatTokenCount(extraNumber(selectedLog, 'cache_read_tokens')) }}</div>
+                  </div>
+                </div>
+              </template>
+
               <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.requestTranscripts.detail.endpoints') }}</div>
                 <div class="mt-2 space-y-1 text-xs text-gray-700 dark:text-gray-200">
@@ -273,54 +368,8 @@
               </div>
             </div>
 
-            <div class="mt-6 space-y-4">
-              <div>
-                <div class="mb-2 flex items-center justify-between gap-2">
-                  <div class="text-sm font-bold text-gray-900 dark:text-white">
-                    {{ t('admin.ops.requestTranscripts.detail.requestText') }}
-                  </div>
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    :disabled="!requestText(selectedLog)"
-                    @click="copyToClipboard(requestText(selectedLog), t('admin.ops.requestTranscripts.requestTextCopied'))"
-                  >
-                    {{ t('admin.ops.requestTranscripts.copyRequestText') }}
-                  </button>
-                </div>
-                <div v-if="extraBool(selectedLog, 'request_text_truncated')" class="mb-2 text-[11px] text-yellow-600 dark:text-yellow-400">
-                  {{ t('admin.ops.requestTranscripts.detail.requestTextTruncated') }}
-                </div>
-                <pre class="max-h-[260px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"><code>{{ requestText(selectedLog) || '—' }}</code></pre>
-              </div>
-
-              <div>
-                <div class="mb-2 flex items-center justify-between gap-2">
-                  <div class="text-sm font-bold text-gray-900 dark:text-white">
-                    {{ t('admin.ops.requestTranscripts.detail.responseText') }}
-                  </div>
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    :disabled="!responseText(selectedLog)"
-                    @click="copyToClipboard(responseText(selectedLog), t('admin.ops.requestTranscripts.responseTextCopied'))"
-                  >
-                    {{ t('admin.ops.requestTranscripts.copyResponseText') }}
-                  </button>
-                </div>
-                <div v-if="extraBool(selectedLog, 'response_text_truncated')" class="mb-2 text-[11px] text-yellow-600 dark:text-yellow-400">
-                  {{ t('admin.ops.requestTranscripts.detail.responseTextTruncated') }}
-                </div>
-                <pre class="max-h-[320px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"><code>{{ responseText(selectedLog) || '—' }}</code></pre>
-              </div>
-            </div>
-          </template>
-
-          <div v-else class="py-16 text-center text-sm text-gray-500 dark:text-gray-400">
-            {{ t('admin.ops.requestTranscripts.noSelection') }}
-          </div>
-        </aside>
-      </div>
+        </template>
+      </BaseDialog>
     </div>
   </AppLayout>
 </template>
@@ -329,6 +378,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import { opsAPI, type OpsSystemLog, type OpsSystemLogQuery } from '@/api/admin/ops'
@@ -346,6 +396,7 @@ const { copyToClipboard } = useClipboard()
 const loading = ref(false)
 const logs = ref<OpsSystemLog[]>([])
 const selectedLog = ref<OpsSystemLog | null>(null)
+const detailOpen = ref(false)
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
@@ -373,6 +424,7 @@ const filters = ref<RequestTranscriptFilters>({
 const userOptions = ref<Array<{ value: number | null; label: string }>>([
   { value: null, label: t('common.all') }
 ])
+const userInfoMap = ref<Map<number, { username: string; email: string }>>(new Map())
 
 const timeRangeOptions = [
   { value: '1h', label: '1h' },
@@ -385,32 +437,47 @@ async function loadUserOptions() {
   const pageSize = 200
   let page = 1
   let totalUsers = 0
-  const items: Array<{ id: number; email: string }> = []
+  const items: Array<{ id: number; username: string; email: string }> = []
 
   try {
     do {
       const res = await adminAPI.users.list(page, pageSize)
       totalUsers = res.total || 0
       for (const user of res.items || []) {
-        if (typeof user.id === 'number' && user.email) {
-          items.push({ id: user.id, email: user.email })
+        if (typeof user.id === 'number') {
+          items.push({
+            id: user.id,
+            username: typeof user.username === 'string' ? user.username.trim() : '',
+            email: typeof user.email === 'string' ? user.email.trim() : ''
+          })
         }
       }
       page += 1
       if (page > 50) break
     } while (items.length < totalUsers)
 
-    items.sort((a, b) => a.email.localeCompare(b.email))
+    items.sort((a, b) => {
+      const left = a.username || a.email || String(a.id)
+      const right = b.username || b.email || String(b.id)
+      return left.localeCompare(right)
+    })
     userOptions.value = [
       { value: null, label: t('common.all') },
       ...items.map((user) => ({
         value: user.id,
-        label: `${user.email} (#${user.id})`
+        label: user.username
+          ? `${user.username} (${user.email || '#' + user.id})`
+          : `${user.email || '#' + user.id} (#${user.id})`
       }))
     ]
+    userInfoMap.value = new Map(items.map((user) => [user.id, {
+      username: user.username,
+      email: user.email
+    }]))
   } catch (error) {
     console.error('[RequestTranscriptsView] Failed to load users', error)
     userOptions.value = [{ value: null, label: t('common.all') }]
+    userInfoMap.value = new Map()
   }
 }
 
@@ -441,12 +508,67 @@ function extraNumber(log: OpsSystemLog | null, key: string): number | null {
   return null
 }
 
+function totalTokens(log: OpsSystemLog | null): number | null {
+  const values = [
+    extraNumber(log, 'input_tokens'),
+    extraNumber(log, 'output_tokens'),
+    extraNumber(log, 'cache_creation_tokens'),
+    extraNumber(log, 'cache_read_tokens')
+  ]
+  if (values.every((value) => value == null)) {
+    return null
+  }
+  return values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+}
+
+function totalCost(log: OpsSystemLog | null): number | null {
+  const actual = extraNumber(log, 'actual_cost')
+  if (actual != null) return actual
+  return extraNumber(log, 'total_cost')
+}
+
+function hasUsageMetrics(log: OpsSystemLog | null): boolean {
+  return totalTokens(log) != null || totalCost(log) != null
+}
+
+function formatTokenCount(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return Math.round(value).toLocaleString()
+}
+
+function formatCost(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return value.toFixed(6)
+}
+
 function requestText(log: OpsSystemLog | null): string {
   return extraString(log, 'request_text')
 }
 
 function responseText(log: OpsSystemLog | null): string {
   return extraString(log, 'response_text')
+}
+
+function userLabel(log: OpsSystemLog | null): string {
+  const userID = log?.user_id ?? extraNumber(log, 'user_id')
+  if (typeof userID === 'number' && userInfoMap.value.has(userID)) {
+    const info = userInfoMap.value.get(userID)
+    if (info?.username) return info.username
+    if (info?.email) return info.email
+  }
+  if (typeof userID === 'number') {
+    return `#${userID}`
+  }
+  return '—'
+}
+
+function openDetail(log: OpsSystemLog) {
+  selectedLog.value = log
+  detailOpen.value = true
+}
+
+function closeDetail() {
+  detailOpen.value = false
 }
 
 function buildQuery(): OpsSystemLogQuery {
@@ -482,6 +604,9 @@ async function fetchLogs() {
 
     if (!selectedLog.value || !logs.value.some((item) => item.id === selectedLog.value?.id)) {
       selectedLog.value = logs.value[0] || null
+      if (detailOpen.value && !selectedLog.value) {
+        detailOpen.value = false
+      }
     }
   } catch (error: any) {
     console.error('[RequestTranscriptsView] Failed to load transcripts', error)

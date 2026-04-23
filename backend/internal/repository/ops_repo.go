@@ -1138,7 +1138,27 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 	}
 
 	where, args, _ := buildOpsSystemLogsWhere(filter)
-	countSQL := "SELECT COUNT(*) FROM ops_system_logs l " + where
+	fromClause := "ops_system_logs l"
+	if filter != nil && strings.TrimSpace(filter.Component) == "audit.request_transcript" {
+		groupExpr := `
+CASE
+  WHEN COALESCE(NULLIF(l.extra->>'request_text',''), '') <> '' THEN
+    COALESCE(l.user_id::text, '0') || '|' ||
+    COALESCE(l.model, '') || '|' ||
+    md5(COALESCE(l.extra->>'request_text', '')) || '|' ||
+    floor(extract(epoch from l.created_at) / 600)::bigint::text
+  ELSE
+    COALESCE(NULLIF(l.client_request_id,''), NULLIF(l.request_id,''), 'log:' || l.id::text)
+END`
+		groupedQuery := `
+SELECT DISTINCT ON (` + groupExpr + `) l.*
+FROM ops_system_logs l
+` + where + `
+ORDER BY ` + groupExpr + `, l.created_at DESC, l.id DESC`
+		fromClause = "(" + groupedQuery + ") l"
+		where = "WHERE 1=1"
+	}
+	countSQL := "SELECT COUNT(*) FROM " + fromClause + " " + where
 	var total int
 	if err := r.db.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
 		return nil, err
@@ -1146,7 +1166,7 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 
 	offset := (page - 1) * pageSize
 	argsWithLimit := append(args, pageSize, offset)
-	query := `
+query := `
 SELECT
   l.id,
   l.created_at,
@@ -1159,8 +1179,37 @@ SELECT
   l.account_id,
   COALESCE(l.platform, ''),
   COALESCE(l.model, ''),
-  COALESCE(l.extra::text, '{}')
-FROM ops_system_logs l
+  COALESCE(l.extra::text, '{}'),
+  u.input_tokens,
+  u.output_tokens,
+  u.cache_creation_tokens,
+  u.cache_read_tokens,
+  u.total_cost,
+  u.actual_cost
+FROM ` + fromClause + `
+LEFT JOIN LATERAL (
+  SELECT
+    ul.input_tokens,
+    ul.output_tokens,
+    ul.cache_creation_tokens,
+    ul.cache_read_tokens,
+    ul.total_cost,
+    ul.actual_cost
+  FROM usage_logs ul
+  WHERE ul.request_id = l.request_id
+     OR (
+       l.user_id IS NOT NULL
+       AND ul.user_id = l.user_id
+       AND COALESCE(ul.model, '') = COALESCE(l.model, '')
+       AND ul.created_at BETWEEN l.created_at - INTERVAL '20 seconds' AND l.created_at + INTERVAL '20 seconds'
+     )
+  ORDER BY
+    CASE WHEN ul.request_id = l.request_id THEN 0 ELSE 1 END,
+    ABS(EXTRACT(EPOCH FROM (ul.created_at - l.created_at))) ASC,
+    ul.created_at DESC,
+    ul.id DESC
+  LIMIT 1
+) u ON TRUE
 ` + where + `
 ORDER BY l.created_at DESC, l.id DESC
 LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
@@ -1177,6 +1226,12 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		var userID sql.NullInt64
 		var accountID sql.NullInt64
 		var extraRaw string
+		var inputTokens sql.NullInt64
+		var outputTokens sql.NullInt64
+		var cacheCreationTokens sql.NullInt64
+		var cacheReadTokens sql.NullInt64
+		var totalCost sql.NullFloat64
+		var actualCost sql.NullFloat64
 		if err := rows.Scan(
 			&item.ID,
 			&item.CreatedAt,
@@ -1190,6 +1245,12 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&item.Platform,
 			&item.Model,
 			&extraRaw,
+			&inputTokens,
+			&outputTokens,
+			&cacheCreationTokens,
+			&cacheReadTokens,
+			&totalCost,
+			&actualCost,
 		); err != nil {
 			return nil, err
 		}
@@ -1206,6 +1267,29 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			extra := make(map[string]any)
 			if err := json.Unmarshal([]byte(extraRaw), &extra); err == nil {
 				item.Extra = extra
+			}
+		}
+		if inputTokens.Valid || outputTokens.Valid || cacheCreationTokens.Valid || cacheReadTokens.Valid || totalCost.Valid || actualCost.Valid {
+			if item.Extra == nil {
+				item.Extra = make(map[string]any)
+			}
+			if inputTokens.Valid {
+				item.Extra["input_tokens"] = inputTokens.Int64
+			}
+			if outputTokens.Valid {
+				item.Extra["output_tokens"] = outputTokens.Int64
+			}
+			if cacheCreationTokens.Valid {
+				item.Extra["cache_creation_tokens"] = cacheCreationTokens.Int64
+			}
+			if cacheReadTokens.Valid {
+				item.Extra["cache_read_tokens"] = cacheReadTokens.Int64
+			}
+			if totalCost.Valid {
+				item.Extra["total_cost"] = totalCost.Float64
+			}
+			if actualCost.Valid {
+				item.Extra["actual_cost"] = actualCost.Float64
 			}
 		}
 		logs = append(logs, item)

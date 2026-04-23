@@ -2424,6 +2424,10 @@ export default {
         wsModeDedicated: '独享（dedicated）',
         wsModeConcurrencyHint: '启用 WS mode 后，该账号并发数将作为该账号 WS 连接池上限。',
         wsModePassthroughHint: 'passthrough 模式不使用 WS 连接池。',
+        reasoningEffortOverride: '强制 reasoning_effort',
+        reasoningEffortOverrideOff: '不覆盖（保留用户请求）',
+        reasoningEffortOverrideDesc:
+          '设置后，无论用户传入 low/medium/high/xhigh 或未传该字段，转发到上游时都会强制改成这里指定的值。',
         oauthResponsesWebsocketsV2: 'OAuth WebSocket Mode',
         oauthResponsesWebsocketsV2Desc:
           '仅对 OpenAI OAuth 生效。开启后该账号才允许使用 OpenAI WebSocket Mode 协议。',
@@ -3966,13 +3970,16 @@ export default {
           queryPlaceholder: '搜索输入文本 / 输出文本 / request_id'
         },
         table: {
+          user: '用户名',
           time: '时间',
           model: '模型',
           requestText: '输入摘要',
           responseText: '输出摘要',
+          usageCost: 'Token / 费用',
           requestId: '请求 ID'
         },
         detailTitle: '侧边详情',
+        detailTitleShort: '详情',
         detail: {
           requestId: '请求 ID',
           clientRequestId: '客户端请求 ID',
@@ -3980,6 +3987,12 @@ export default {
           accountId: '账号 ID',
           apiKeyId: 'API Key ID',
           groupId: '分组 ID',
+          totalTokens: '总 Token',
+          totalCost: '费用',
+          inputTokens: '输入 Token',
+          outputTokens: '输出 Token',
+          cacheCreationTokens: '缓存写入 Token',
+          cacheReadTokens: '缓存读取 Token',
           platform: '平台',
           model: '模型',
           endpoints: '端点',
