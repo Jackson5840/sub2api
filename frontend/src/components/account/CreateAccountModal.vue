@@ -2369,6 +2369,21 @@
         </div>
       </div>
 
+      <div
+        v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="input-label">{{ t('admin.accounts.openai.reasoningEffortOverride') }}</label>
+        <select v-model="openaiReasoningEffortOverride" class="input">
+          <option value="">{{ t('admin.accounts.openai.reasoningEffortOverrideOff') }}</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+          <option value="xhigh">xhigh</option>
+        </select>
+        <p class="input-hint">{{ t('admin.accounts.openai.reasoningEffortOverrideDesc') }}</p>
+      </div>
+
       <!-- Anthropic API Key 自动透传开关 -->
       <div
         v-if="form.platform === 'anthropic' && accountCategory === 'apikey'"
@@ -3071,6 +3086,7 @@ const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(true)
 const openaiPassthroughEnabled = ref(false)
+const openaiReasoningEffortOverride = ref('')
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
@@ -3122,6 +3138,35 @@ function buildAntigravityExtra(): Record<string, unknown> | undefined {
   if (mixedScheduling.value) extra.mixed_scheduling = true
   if (allowOverages.value) extra.allow_overages = true
   return Object.keys(extra).length > 0 ? extra : undefined
+}
+
+function normalizeOpenAIReasoningEffortOverrideValue(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const value = raw.trim().toLowerCase().replace(/[-_\s]+/g, '')
+  switch (value) {
+    case 'low':
+    case 'medium':
+    case 'high':
+      return value
+    case 'xhigh':
+    case 'extrahigh':
+      return 'xhigh'
+    default:
+      return ''
+  }
+}
+
+function applyOpenAIReasoningEffortOverrideCredential(credentials: Record<string, unknown>) {
+  if (form.platform !== 'openai') {
+    delete credentials.reasoning_effort_override
+    return
+  }
+  const override = normalizeOpenAIReasoningEffortOverrideValue(openaiReasoningEffortOverride.value)
+  if (override) {
+    credentials.reasoning_effort_override = override
+  } else {
+    delete credentials.reasoning_effort_override
+  }
 }
 
 const showMixedChannelWarning = ref(false)
@@ -3797,6 +3842,7 @@ const resetForm = () => {
   interceptWarmupRequests.value = false
   autoPauseOnExpired.value = true
   openaiPassthroughEnabled.value = false
+  openaiReasoningEffortOverride.value = ''
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
@@ -4075,6 +4121,7 @@ const handleSubmit = async () => {
     base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
     api_key: apiKeyValue.value.trim()
   }
+  applyOpenAIReasoningEffortOverrideCredential(credentials)
   if (form.platform === 'gemini') {
     credentials.tier_id = geminiTierAIStudio.value
   }
@@ -4241,6 +4288,7 @@ const handleOpenAIExchange = async (authCode: string) => {
     if (!tokenInfo) return
 
     const credentials = oauthClient.buildCredentials(tokenInfo)
+    applyOpenAIReasoningEffortOverrideCredential(credentials)
     const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
     const extra = buildOpenAIExtra(oauthExtra)
     const shouldCreateOpenAI = form.platform === 'openai'
@@ -4331,6 +4379,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         }
 
         const credentials = oauthClient.buildCredentials(tokenInfo)
+        applyOpenAIReasoningEffortOverrideCredential(credentials)
         if (clientId) {
           credentials.client_id = clientId
         }

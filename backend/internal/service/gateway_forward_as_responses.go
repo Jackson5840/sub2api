@@ -44,6 +44,10 @@ func (s *GatewayService) ForwardAsResponses(
 	}
 	originalModel := responsesReq.Model
 	clientStream := responsesReq.Stream
+	reasoningEffort := applyOpenAIReasoningEffortOverrideToResponsesRequest(&responsesReq, account)
+	if reasoningEffort == nil {
+		reasoningEffort = ExtractResponsesReasoningEffortFromBody(body)
+	}
 
 	// 2. Convert Responses → Anthropic
 	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(&responsesReq)
@@ -57,7 +61,6 @@ func (s *GatewayService) ForwardAsResponses(
 
 	// 4. Model mapping
 	mappedModel := originalModel
-	reasoningEffort := ExtractResponsesReasoningEffortFromBody(body)
 	if account.Type == AccountTypeAPIKey {
 		mappedModel = account.GetMappedModel(originalModel)
 	}
