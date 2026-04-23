@@ -82,6 +82,50 @@
         </div>
       </div>
 
+      <!-- OpenAI reasoning effort override -->
+      <div
+        v-if="allOpenAIPassthroughCapable"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="mb-3 flex items-center justify-between">
+          <div class="flex-1 pr-4">
+            <label
+              id="bulk-edit-openai-reasoning-label"
+              class="input-label mb-0"
+              for="bulk-edit-openai-reasoning-enabled"
+            >
+              {{ t('admin.accounts.openai.reasoningEffortOverride') }}
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.reasoningEffortOverrideDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="enableOpenAIReasoningEffortOverride"
+            id="bulk-edit-openai-reasoning-enabled"
+            type="checkbox"
+            aria-controls="bulk-edit-openai-reasoning"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div
+          id="bulk-edit-openai-reasoning"
+          :class="!enableOpenAIReasoningEffortOverride && 'pointer-events-none opacity-50'"
+        >
+          <select
+            v-model="openaiReasoningEffortOverride"
+            class="input"
+            aria-labelledby="bulk-edit-openai-reasoning-label"
+          >
+            <option value="">{{ t('admin.accounts.openai.reasoningEffortOverrideOff') }}</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Base URL (API Key only) -->
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1010,6 +1054,7 @@ const enableRateMultiplier = ref(false)
 const enableStatus = ref(false)
 const enableGroups = ref(false)
 const enableOpenAIPassthrough = ref(false)
+const enableOpenAIReasoningEffortOverride = ref(false)
 const enableOpenAIWSMode = ref(false)
 const enableRpmLimit = ref(false)
 
@@ -1033,6 +1078,7 @@ const rateMultiplier = ref(1)
 const status = ref<'active' | 'inactive'>('active')
 const groupIds = ref<number[]>([])
 const openaiPassthroughEnabled = ref(false)
+const openaiReasoningEffortOverride = ref('')
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const rpmLimitEnabled = ref(false)
 const bulkBaseRpm = ref<number | null>(null)
@@ -1074,6 +1120,22 @@ const openAIWSModeOptions = computed(() => [
 const openAIWSModeConcurrencyHintKey = computed(() =>
   resolveOpenAIWSModeConcurrencyHintKey(openaiOAuthResponsesWebSocketV2Mode.value)
 )
+
+function normalizeOpenAIReasoningEffortOverrideValue(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const value = raw.trim().toLowerCase().replace(/[-_\s]+/g, '')
+  switch (value) {
+    case 'low':
+    case 'medium':
+    case 'high':
+      return value
+    case 'xhigh':
+    case 'extrahigh':
+      return 'xhigh'
+    default:
+      return ''
+  }
+}
 
 // Model mapping helpers
 const addModelMapping = () => {
@@ -1210,6 +1272,16 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     }
   }
 
+  if (enableOpenAIReasoningEffortOverride.value) {
+    const override = normalizeOpenAIReasoningEffortOverrideValue(openaiReasoningEffortOverride.value)
+    if (override) {
+      credentials.reasoning_effort_override = override
+    } else {
+      credentials.reasoning_effort_override = ''
+    }
+    credentialsChanged = true
+  }
+
   if (enableModelRestriction.value && !isOpenAIModelRestrictionDisabled.value) {
     // 统一使用 model_mapping 字段
     if (modelRestrictionMode.value === 'whitelist') {
@@ -1342,6 +1414,7 @@ const handleSubmit = async () => {
     enableStatus.value ||
     enableGroups.value ||
     enableOpenAIWSMode.value ||
+    enableOpenAIReasoningEffortOverride.value ||
     enableRpmLimit.value ||
     userMsgQueueMode.value !== null
 
@@ -1434,6 +1507,7 @@ watch(
       enableStatus.value = false
       enableGroups.value = false
       enableOpenAIPassthrough.value = false
+      enableOpenAIReasoningEffortOverride.value = false
       enableOpenAIWSMode.value = false
       enableRpmLimit.value = false
 
@@ -1454,6 +1528,7 @@ watch(
       status.value = 'active'
       groupIds.value = []
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
+      openaiReasoningEffortOverride.value = ''
       rpmLimitEnabled.value = false
       bulkBaseRpm.value = null
       bulkRpmStrategy.value = 'tiered'

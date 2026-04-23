@@ -2523,6 +2523,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
+		if next, _, changed, overrideErr := applyOpenAIReasoningEffortOverrideToBody(normalized, account); overrideErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", overrideErr)
+		} else if changed {
+			normalized = next
+		}
 
 		return openAIWSClientPayload{
 			payloadRaw:         normalized,

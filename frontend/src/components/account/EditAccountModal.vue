@@ -1119,6 +1119,21 @@
         </div>
       </div>
 
+      <div
+        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'apikey')"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="input-label">{{ t('admin.accounts.openai.reasoningEffortOverride') }}</label>
+        <select v-model="openaiReasoningEffortOverride" class="input">
+          <option value="">{{ t('admin.accounts.openai.reasoningEffortOverrideOff') }}</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+          <option value="xhigh">xhigh</option>
+        </select>
+        <p class="input-hint">{{ t('admin.accounts.openai.reasoningEffortOverrideDesc') }}</p>
+      </div>
+
       <!-- Anthropic API Key 自动透传开关 -->
       <div
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
@@ -1898,6 +1913,7 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const anthropicPassthroughEnabled = ref(false)
+const openaiReasoningEffortOverride = ref('')
 const editQuotaLimit = ref<number | null>(null)
 const editQuotaDailyLimit = ref<number | null>(null)
 const editQuotaWeeklyLimit = ref<number | null>(null)
@@ -1913,6 +1929,38 @@ const openAIWSModeOptions = computed(() => [
   // { value: OPENAI_WS_MODE_CTX_POOL, label: t('admin.accounts.openai.wsModeCtxPool') },
   { value: OPENAI_WS_MODE_PASSTHROUGH, label: t('admin.accounts.openai.wsModePassthrough') }
 ])
+
+function normalizeOpenAIReasoningEffortOverrideValue(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const value = raw.trim().toLowerCase().replace(/[-_\s]+/g, '')
+  switch (value) {
+    case 'low':
+    case 'medium':
+    case 'high':
+      return value
+    case 'xhigh':
+    case 'extrahigh':
+      return 'xhigh'
+    default:
+      return ''
+  }
+}
+
+function applyOpenAIReasoningEffortOverrideCredential(
+  credentials: Record<string, unknown>,
+  platform: string | undefined,
+) {
+  if (platform !== 'openai') {
+    delete credentials.reasoning_effort_override
+    return
+  }
+  const override = normalizeOpenAIReasoningEffortOverrideValue(openaiReasoningEffortOverride.value)
+  if (override) {
+    credentials.reasoning_effort_override = override
+  } else {
+    delete credentials.reasoning_effort_override
+  }
+}
 const openaiResponsesWebSocketV2Mode = computed({
   get: () => {
     if (props.account?.type === 'apikey') {
@@ -2067,8 +2115,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   anthropicPassthroughEnabled.value = false
+  openaiReasoningEffortOverride.value = ''
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'apikey')) {
     openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
+    openaiReasoningEffortOverride.value = normalizeOpenAIReasoningEffortOverrideValue(credentials?.reasoning_effort_override)
     openaiOAuthResponsesWebSocketV2Mode.value = resolveOpenAIWSModeFromExtra(extra, {
       modeKey: 'openai_oauth_responses_websockets_v2_mode',
       enabledKey: 'openai_oauth_responses_websockets_v2_enabled',
@@ -2753,6 +2803,7 @@ const handleSubmit = async () => {
         ...currentCredentials,
         base_url: newBaseUrl
       }
+      applyOpenAIReasoningEffortOverrideCredential(newCredentials, props.account.platform)
 
       // Handle API key
       if (editApiKey.value.trim()) {
@@ -2889,6 +2940,7 @@ const handleSubmit = async () => {
       const currentCredentials = (updatePayload.credentials as Record<string, unknown>) ||
         ((props.account.credentials as Record<string, unknown>) || {})
       const newCredentials: Record<string, unknown> = { ...currentCredentials }
+      applyOpenAIReasoningEffortOverrideCredential(newCredentials, props.account.platform)
       const shouldApplyModelMapping = !openaiPassthroughEnabled.value
 
       if (shouldApplyModelMapping) {

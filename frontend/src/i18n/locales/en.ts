@@ -2277,6 +2277,10 @@ export default {
         wsModeConcurrencyHint:
           'When WS mode is enabled, account concurrency becomes the WS connection pool limit for this account.',
         wsModePassthroughHint: 'Passthrough mode does not use the WS connection pool.',
+        reasoningEffortOverride: 'Force reasoning_effort',
+        reasoningEffortOverrideOff: 'Do not override (keep client request)',
+        reasoningEffortOverrideDesc:
+          'When set, the gateway always rewrites the upstream reasoning effort to this value, regardless of whether the client sends low/medium/high/xhigh or omits the field.',
         oauthResponsesWebsocketsV2: 'OAuth WebSocket Mode',
         oauthResponsesWebsocketsV2Desc:
           'Only applies to OpenAI OAuth. This account can use OpenAI WebSocket Mode only when enabled.',
