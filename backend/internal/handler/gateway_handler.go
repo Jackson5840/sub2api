@@ -961,6 +961,32 @@ func (h *GatewayHandler) Usage(c *gin.Context) {
 	h.usageUnrestricted(c, ctx, apiKey, subject, usageData, modelStats)
 }
 
+// Balance returns only the wallet balance for the current API key owner.
+// GET /v1/balance
+func (h *GatewayHandler) Balance(c *gin.Context) {
+	_, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
+		return
+	}
+
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
+		return
+	}
+
+	latestUser, err := h.userService.GetByID(c.Request.Context(), subject.UserID)
+	if err != nil {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to get user info")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"balance": latestUser.Balance,
+	})
+}
+
 // parseUsageDateRange 解析 start_date / end_date query params，默认返回近 30 天范围
 func (h *GatewayHandler) parseUsageDateRange(c *gin.Context) (time.Time, time.Time) {
 	now := timezone.Now()

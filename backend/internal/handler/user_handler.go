@@ -32,6 +32,10 @@ type UpdateProfileRequest struct {
 	Username *string `json:"username"`
 }
 
+type UserBalanceResponse struct {
+	Balance float64 `json:"balance"`
+}
+
 // GetProfile handles getting user profile
 // GET /api/v1/users/me
 func (h *UserHandler) GetProfile(c *gin.Context) {
@@ -48,6 +52,26 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	}
 
 	response.Success(c, dto.UserFromService(userData))
+}
+
+// GetBalance handles getting current user balance summary
+// GET /api/v1/user/balance
+func (h *UserHandler) GetBalance(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	userData, err := h.userService.GetByID(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, UserBalanceResponse{
+		Balance: userData.Balance,
+	})
 }
 
 // ChangePassword handles changing user password
