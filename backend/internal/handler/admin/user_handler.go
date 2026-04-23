@@ -22,13 +22,17 @@ type UserWithConcurrency struct {
 type UserHandler struct {
 	adminService       service.AdminService
 	concurrencyService *service.ConcurrencyService
+	usageService       *service.UsageService
+	authService        *service.AuthService
 }
 
 // NewUserHandler creates a new admin user handler
-func NewUserHandler(adminService service.AdminService, concurrencyService *service.ConcurrencyService) *UserHandler {
+func NewUserHandler(adminService service.AdminService, concurrencyService *service.ConcurrencyService, usageService *service.UsageService, authService *service.AuthService) *UserHandler {
 	return &UserHandler{
 		adminService:       adminService,
 		concurrencyService: concurrencyService,
+		usageService:       usageService,
+		authService:        authService,
 	}
 }
 
@@ -385,6 +389,63 @@ func (h *UserHandler) GetUserUsage(c *gin.Context) {
 	}
 
 	response.Success(c, stats)
+}
+
+// GetUserDashboardStats handles getting dashboard summary stats for a specific user.
+// GET /api/v1/admin/users/:id/dashboard
+func (h *UserHandler) GetUserDashboardStats(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if h.usageService == nil {
+		response.Error(c, 503, "Usage service not available")
+		return
+	}
+
+	stats, err := h.usageService.GetUserDashboardStats(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, 500, "Failed to get user dashboard stats")
+		return
+	}
+
+	response.Success(c, stats)
+}
+
+// Impersonate issues a fresh token pair for the target user so an admin can
+// directly operate the user's account pages.
+// POST /api/v1/admin/users/:id/impersonate
+func (h *UserHandler) Impersonate(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if h.authService == nil {
+		response.Error(c, 503, "Auth service not available")
+		return
+	}
+
+	user, err := h.adminService.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	tokenPair, err := h.authService.GenerateTokenPair(c.Request.Context(), user, "")
+	if err != nil {
+		response.Error(c, 500, "Failed to generate impersonation token")
+		return
+	}
+
+	response.Success(c, gin.H{
+		"access_token":  tokenPair.AccessToken,
+		"refresh_token": tokenPair.RefreshToken,
+		"expires_in":    tokenPair.ExpiresIn,
+		"token_type":    "Bearer",
+		"user":          dto.UserFromService(user),
+	})
 }
 
 // GetBalanceHistory handles getting user's balance/concurrency change history
