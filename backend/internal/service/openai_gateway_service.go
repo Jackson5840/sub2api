@@ -1855,7 +1855,18 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
 	if passthroughEnabled {
 		// 透传分支只需要轻量提取字段，避免热路径全量 Unmarshal。
-		reasoningEffort := extractOpenAIReasoningEffortFromBody(body, reqModel)
+		overrideBody, overrideEffort, changed, err := applyOpenAIReasoningEffortOverrideToBody(body, account)
+		if err != nil {
+			return nil, fmt.Errorf("apply reasoning effort override: %w", err)
+		}
+		if changed {
+			body = overrideBody
+			originalBody = overrideBody
+		}
+		reasoningEffort := overrideEffort
+		if reasoningEffort == nil {
+			reasoningEffort = extractOpenAIReasoningEffortFromBody(body, reqModel)
+		}
 		return s.forwardOpenAIPassthrough(ctx, c, account, originalBody, reqModel, reasoningEffort, reqStream, startTime)
 	}
 
@@ -2001,6 +2012,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			markPatchSet("reasoning.effort", "none")
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized reasoning.effort: minimal -> none (account: %s)", account.Name)
 		}
+	}
+
+	if override, changed := applyOpenAIReasoningEffortOverrideToMap(reqBody, account); changed {
+		bodyModified = true
+		disablePatch()
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Forced reasoning.effort override applied: %s (account: %s)", override, account.Name)
 	}
 
 	if account.Type == AccountTypeOAuth {
