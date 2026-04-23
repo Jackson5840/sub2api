@@ -1121,15 +1121,16 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
-	if filter == nil {
-		filter = &service.OpsSystemLogFilter{}
+	safeFilter := filter
+	if safeFilter == nil {
+		safeFilter = &service.OpsSystemLogFilter{}
 	}
 
-	page := filter.Page
+	page := safeFilter.Page
 	if page <= 0 {
 		page = 1
 	}
-	pageSize := filter.PageSize
+	pageSize := safeFilter.PageSize
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -1137,9 +1138,9 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 		pageSize = 200
 	}
 
-	where, args, _ := buildOpsSystemLogsWhere(filter)
+	where, args, _ := buildOpsSystemLogsWhere(safeFilter)
 	fromClause := "ops_system_logs l"
-	if filter != nil && strings.TrimSpace(filter.Component) == "audit.request_transcript" {
+	if strings.TrimSpace(safeFilter.Component) == "audit.request_transcript" {
 		groupExpr := `
 CASE
   WHEN COALESCE(NULLIF(l.extra->>'request_text',''), '') <> '' THEN
@@ -1166,7 +1167,7 @@ ORDER BY ` + groupExpr + `, l.created_at DESC, l.id DESC`
 
 	offset := (page - 1) * pageSize
 	argsWithLimit := append(args, pageSize, offset)
-query := `
+	query := `
 SELECT
   l.id,
   l.created_at,
