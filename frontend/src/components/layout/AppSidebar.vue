@@ -32,7 +32,7 @@
           <router-link
             v-for="item in adminNavItems"
             :key="item.path"
-            :to="item.path"
+            :to="navTarget(item)"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path) }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -65,7 +65,7 @@
           <router-link
             v-for="item in personalNavItems"
             :key="item.path"
-            :to="item.path"
+            :to="navTarget(item, true)"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path) }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -106,6 +106,19 @@
 
     <!-- Bottom Section -->
     <div class="mt-auto border-t border-gray-100 p-3 dark:border-dark-800">
+      <button
+        v-if="authStore.isImpersonating"
+        type="button"
+        class="sidebar-link mb-2 w-full"
+        :title="sidebarCollapsed ? t('nav.returnToAdmin') : undefined"
+        @click="handleReturnToAdmin"
+      >
+        <ChevronDoubleLeftIcon class="h-5 w-5 flex-shrink-0" />
+        <transition name="fade">
+          <span v-if="!sidebarCollapsed">{{ t('nav.returnToAdmin') }}</span>
+        </transition>
+      </button>
+
       <!-- Theme Toggle -->
       <button
         @click="toggleTheme"
@@ -595,6 +608,25 @@ const adminNavItems = computed((): NavItem[] => {
   return baseItems
 })
 
+const adminViewingUserId = computed(() => {
+  if (!isAdmin.value) return ''
+  const raw = route.query.admin_user_id
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+})
+
+function navTarget(item: NavItem, preserveAdminUser = false) {
+  if (!preserveAdminUser || !adminViewingUserId.value) {
+    return item.path
+  }
+  return {
+    path: item.path,
+    query: {
+      admin_user_id: adminViewingUserId.value
+    }
+  }
+}
+
 function toggleSidebar() {
   appStore.toggleSidebar()
 }
@@ -607,6 +639,14 @@ function toggleTheme() {
 
 function closeMobile() {
   appStore.setMobileOpen(false)
+}
+
+function handleReturnToAdmin() {
+  if (authStore.stopImpersonation()) {
+    window.location.href = '/admin/users'
+    return
+  }
+  window.location.href = '/login'
 }
 
 function handleMenuItemClick(itemPath: string) {

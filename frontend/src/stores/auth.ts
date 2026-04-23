@@ -12,6 +12,7 @@ const AUTH_TOKEN_KEY = 'auth_token'
 const AUTH_USER_KEY = 'auth_user'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const TOKEN_EXPIRES_AT_KEY = 'token_expires_at' // 存储过期时间戳而非有效期
+const IMPERSONATION_BACKUP_KEY = 'impersonation_admin_backup'
 const AUTO_REFRESH_INTERVAL = 60 * 1000 // 60 seconds for user data refresh
 const TOKEN_REFRESH_BUFFER = 120 * 1000 // 120 seconds before expiry to refresh token
 
@@ -23,6 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshTokenValue = ref<string | null>(null)
   const tokenExpiresAt = ref<number | null>(null) // 过期时间戳（毫秒）
   const runMode = ref<'standard' | 'simple'>('standard')
+  const impersonating = ref<boolean>(false)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
 
@@ -37,6 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isSimpleMode = computed(() => runMode.value === 'simple')
+  const isImpersonating = computed(() => impersonating.value)
 
   // ==================== Actions ====================
 
@@ -46,6 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Also starts auto-refresh and immediately fetches latest user data
    */
   function checkAuth(): void {
+    impersonating.value = !!sessionStorage.getItem(IMPERSONATION_BACKUP_KEY)
     const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
     const savedUser = localStorage.getItem(AUTH_USER_KEY)
     const savedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
@@ -254,6 +258,85 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function captureCurrentAuthSnapshot() {
+    return {
+      token: token.value,
+      refreshToken: refreshTokenValue.value,
+      tokenExpiresAt: tokenExpiresAt.value,
+      user: user.value,
+      runMode: runMode.value
+    }
+  }
+
+  function restoreAuthSnapshot(snapshot: {
+    token: string | null
+    refreshToken: string | null
+    tokenExpiresAt: number | null
+    user: User | null
+    runMode: 'standard' | 'simple'
+  }) {
+    stopAutoRefresh()
+    stopTokenRefresh()
+
+    token.value = snapshot.token
+    refreshTokenValue.value = snapshot.refreshToken
+    tokenExpiresAt.value = snapshot.tokenExpiresAt
+    user.value = snapshot.user
+    runMode.value = snapshot.runMode
+
+    if (snapshot.token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, snapshot.token)
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+    }
+    if (snapshot.user) {
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(snapshot.user))
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY)
+    }
+    if (snapshot.refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, snapshot.refreshToken)
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+    }
+    if (snapshot.tokenExpiresAt !== null) {
+      localStorage.setItem(TOKEN_EXPIRES_AT_KEY, String(snapshot.tokenExpiresAt))
+    } else {
+      localStorage.removeItem(TOKEN_EXPIRES_AT_KEY)
+    }
+
+    if (snapshot.token && snapshot.user) {
+      startAutoRefresh()
+      if (snapshot.refreshToken && snapshot.tokenExpiresAt !== null) {
+        scheduleTokenRefreshAt(snapshot.tokenExpiresAt)
+      }
+    }
+  }
+
+  function startImpersonation(response: AuthResponse): void {
+    const backup = captureCurrentAuthSnapshot()
+    sessionStorage.setItem(IMPERSONATION_BACKUP_KEY, JSON.stringify(backup))
+    impersonating.value = true
+    setAuthFromResponse(response)
+  }
+
+  function stopImpersonation(): boolean {
+    const raw = sessionStorage.getItem(IMPERSONATION_BACKUP_KEY)
+    if (!raw) return false
+    try {
+      const snapshot = JSON.parse(raw)
+      restoreAuthSnapshot(snapshot)
+      sessionStorage.removeItem(IMPERSONATION_BACKUP_KEY)
+      impersonating.value = false
+      return true
+    } catch (error) {
+      console.error('Failed to restore impersonation snapshot:', error)
+      sessionStorage.removeItem(IMPERSONATION_BACKUP_KEY)
+      impersonating.value = false
+      return false
+    }
+  }
+
   /**
    * User registration
    * @param userData - Registration data (username, email, password)
@@ -377,6 +460,7 @@ export const useAuthStore = defineStore('auth', () => {
     refreshTokenValue.value = null
     tokenExpiresAt.value = null
     user.value = null
+    impersonating.value = false
     localStorage.removeItem(AUTH_TOKEN_KEY)
     localStorage.removeItem(AUTH_USER_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
@@ -395,6 +479,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     isSimpleMode,
+    isImpersonating,
 
     // Actions
     login,
@@ -403,6 +488,8 @@ export const useAuthStore = defineStore('auth', () => {
     setToken,
     logout,
     checkAuth,
-    refreshUser
+    refreshUser,
+    startImpersonation,
+    stopImpersonation
   }
 })
