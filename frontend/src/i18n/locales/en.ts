@@ -357,6 +357,7 @@ export default {
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
+    requestTranscripts: 'Request Audit',
     promoCodes: 'Promo Codes',
     settings: 'Settings',
     myAccount: 'My Account',

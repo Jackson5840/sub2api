@@ -359,6 +359,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/request-transcripts',
+    name: 'AdminRequestTranscripts',
+    component: () => import('@/views/admin/RequestTranscriptsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Request Transcripts',
+      titleKey: 'admin.ops.requestTranscripts.title',
+      descriptionKey: 'admin.ops.requestTranscripts.description'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),
