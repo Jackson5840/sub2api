@@ -79,7 +79,6 @@ export const useAuthStore = defineStore('auth', () => {
   const runMode = ref<'standard' | 'simple'>('standard')
   const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   const impersonating = ref<boolean>(false)
-  const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
 
@@ -96,7 +95,6 @@ export const useAuthStore = defineStore('auth', () => {
   const isSimpleMode = computed(() => runMode.value === 'simple')
   const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
   const isImpersonating = computed(() => impersonating.value)
-  const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
 
   // ==================== Actions ====================
 
@@ -565,8 +563,6 @@ export const useAuthStore = defineStore('auth', () => {
     isSimpleMode,
     hasPendingAuthSession,
     isImpersonating,
-    hasPendingAuthSession,
-    isImpersonating,
 
     // Actions
     login,
@@ -576,10 +572,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     checkAuth,
     refreshUser,
-    setPendingAuthSession,
-    clearPendingAuthSession
-    startImpersonation,
-    stopImpersonation
     setPendingAuthSession,
     clearPendingAuthSession,
     startImpersonation,
