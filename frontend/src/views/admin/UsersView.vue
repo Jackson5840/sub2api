@@ -239,7 +239,7 @@
           :columns="columns"
           :data="users"
           :loading="loading"
-          :actions-count="7"
+          :actions-count="8"
           :server-side-sort="true"
           default-sort-key="created_at"
           default-sort-order="desc"
@@ -549,6 +549,15 @@
                 {{ t('admin.users.apiKeys') }}
               </button>
 
+              <!-- Manage User Account -->
+              <button
+                @click="handleManageUser(user); closeActionMenu()"
+                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+              >
+                <Icon name="chart" size="sm" class="text-gray-400" :stroke-width="2" />
+                {{ t('admin.users.manageAsUser') }}
+              </button>
+
               <!-- Allowed Groups -->
               <button
                 @click="handleAllowedGroups(user); closeActionMenu()"
@@ -620,8 +629,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatDateTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
@@ -650,6 +661,8 @@ import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryM
 import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
 
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const router = useRouter()
 
 // Generate dynamic attribute columns from enabled definitions
 const attributeColumns = computed<Column[]>(() =>
@@ -1314,6 +1327,16 @@ const handleToggleStatus = async (user: AdminUser) => {
 const handleViewApiKeys = (user: AdminUser) => {
   viewingUser.value = user
   showApiKeysModal.value = true
+}
+
+const handleManageUser = async (user: AdminUser) => {
+  try {
+    const response = await adminAPI.users.impersonate(user.id)
+    authStore.startImpersonation(response)
+    await router.push('/dashboard')
+  } catch (error: any) {
+    appStore.showError(error?.response?.data?.detail || t('admin.users.failedToImpersonate'))
+  }
 }
 
 const closeApiKeysModal = () => {

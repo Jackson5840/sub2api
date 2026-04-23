@@ -5,6 +5,8 @@
 
 import { apiClient } from '../client'
 import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
+import type { UserDashboardStats } from '@/api/usage'
+import type { AuthResponse } from '@/types'
 
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
@@ -221,6 +223,26 @@ export async function getUserUsageStats(
 }
 
 /**
+ * Get user dashboard summary stats (admin only)
+ * @param id - User ID
+ * @returns Dashboard summary stats for the target user
+ */
+export async function getUserDashboardStats(id: number): Promise<UserDashboardStats> {
+  const { data } = await apiClient.get<UserDashboardStats>(`/admin/users/${id}/dashboard`)
+  return data
+}
+
+/**
+ * Impersonate a user and receive a fresh token pair for direct account management.
+ * @param id - Target user ID
+ * @returns Auth response for the impersonated user
+ */
+export async function impersonate(id: number): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>(`/admin/users/${id}/impersonate`, {})
+  return data
+}
+
+/**
  * Balance history item returned from the API
  */
 export interface BalanceHistoryItem {
@@ -308,6 +330,8 @@ export const usersAPI = {
   toggleStatus,
   getUserApiKeys,
   getUserUsageStats,
+  getUserDashboardStats,
+  impersonate,
   getUserBalanceHistory,
   replaceGroup,
   bindUserAuthIdentity
