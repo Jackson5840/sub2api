@@ -1121,15 +1121,16 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
-	if filter == nil {
-		filter = &service.OpsSystemLogFilter{}
+	safeFilter := filter
+	if safeFilter == nil {
+		safeFilter = &service.OpsSystemLogFilter{}
 	}
 
-	page := filter.Page
+	page := safeFilter.Page
 	if page <= 0 {
 		page = 1
 	}
-	pageSize := filter.PageSize
+	pageSize := safeFilter.PageSize
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -1137,8 +1138,28 @@ func (r *opsRepository) ListSystemLogs(ctx context.Context, filter *service.OpsS
 		pageSize = 200
 	}
 
-	where, args, _ := buildOpsSystemLogsWhere(filter)
-	countSQL := "SELECT COUNT(*) FROM ops_system_logs l " + where
+	where, args, _ := buildOpsSystemLogsWhere(safeFilter)
+	fromClause := "ops_system_logs l"
+	if strings.TrimSpace(safeFilter.Component) == "audit.request_transcript" {
+		groupExpr := `
+CASE
+  WHEN COALESCE(NULLIF(l.extra->>'request_text',''), '') <> '' THEN
+    COALESCE(l.user_id::text, '0') || '|' ||
+    COALESCE(l.model, '') || '|' ||
+    md5(COALESCE(l.extra->>'request_text', '')) || '|' ||
+    floor(extract(epoch from l.created_at) / 600)::bigint::text
+  ELSE
+    COALESCE(NULLIF(l.client_request_id,''), NULLIF(l.request_id,''), 'log:' || l.id::text)
+END`
+		groupedQuery := `
+SELECT DISTINCT ON (` + groupExpr + `) l.*
+FROM ops_system_logs l
+` + where + `
+ORDER BY ` + groupExpr + `, l.created_at DESC, l.id DESC`
+		fromClause = "(" + groupedQuery + ") l"
+		where = "WHERE 1=1"
+	}
+	countSQL := "SELECT COUNT(*) FROM " + fromClause + " " + where
 	var total int
 	if err := r.db.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
 		return nil, err
