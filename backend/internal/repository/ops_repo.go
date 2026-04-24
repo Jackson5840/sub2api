@@ -1167,7 +1167,7 @@ ORDER BY ` + groupExpr + `, l.created_at DESC, l.id DESC`
 
 	offset := (page - 1) * pageSize
 	argsWithLimit := append(args, pageSize, offset)
-query := `
+	query := `
 SELECT
   l.id,
   l.created_at,
