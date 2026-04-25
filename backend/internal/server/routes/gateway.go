@@ -2,6 +2,7 @@ package routes
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
@@ -67,6 +68,7 @@ func RegisterGatewayRoutes(
 		gateway.GET("/models", h.Gateway.Models)
 		gateway.GET("/usage", h.Gateway.Usage)
 		gateway.GET("/balance", h.Gateway.Balance)
+		gateway.GET("/subscription/progress", apiKeySubscriptionProgressHandler(subscriptionService))
 		// OpenAI Responses API: auto-route based on group platform
 		gateway.POST("/responses", func(c *gin.Context) {
 			if getGroupPlatform(c) == service.PlatformOpenAI {
@@ -216,6 +218,84 @@ func RegisterGatewayRoutes(
 		antigravityV1Beta.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
 	}
 
+}
+
+type apiKeySubscriptionWindowResponse struct {
+	Used    float64    `json:"used"`
+	ResetAt *time.Time `json:"reset_at"`
+}
+
+type apiKeySubscriptionProgressResponse struct {
+	Daily   *apiKeySubscriptionWindowResponse `json:"daily,omitempty"`
+	Weekly  *apiKeySubscriptionWindowResponse `json:"weekly,omitempty"`
+	Monthly *apiKeySubscriptionWindowResponse `json:"monthly,omitempty"`
+}
+
+func apiKeySubscriptionProgressHandler(subscriptionService *service.SubscriptionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if subscriptionService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "api_error",
+					"message": "Subscription service unavailable",
+				},
+			})
+			return
+		}
+
+		apiKey, ok := middleware.GetAPIKeyFromContext(c)
+		if !ok || apiKey == nil || apiKey.GroupID == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Active subscription not found",
+				},
+			})
+			return
+		}
+
+		subject, ok := middleware.GetAuthSubjectFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "authentication_error",
+					"message": "Invalid API key",
+				},
+			})
+			return
+		}
+
+		progress, err := subscriptionService.GetActiveSubscriptionProgress(c.Request.Context(), subject.UserID, *apiKey.GroupID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Active subscription not found",
+				},
+			})
+			return
+		}
+
+		resp := apiKeySubscriptionProgressResponse{}
+		if progress.Daily != nil {
+			resetAt := progress.Daily.ResetsAt
+			resp.Daily = &apiKeySubscriptionWindowResponse{Used: progress.Daily.UsedUSD, ResetAt: &resetAt}
+		}
+		if progress.Weekly != nil {
+			resetAt := progress.Weekly.ResetsAt
+			resp.Weekly = &apiKeySubscriptionWindowResponse{Used: progress.Weekly.UsedUSD, ResetAt: &resetAt}
+		}
+		if progress.Monthly != nil {
+			resetAt := progress.Monthly.ResetsAt
+			resp.Monthly = &apiKeySubscriptionWindowResponse{Used: progress.Monthly.UsedUSD, ResetAt: &resetAt}
+		}
+
+		c.JSON(http.StatusOK, resp)
+	}
 }
 
 // getGroupPlatform extracts the group platform from the API Key stored in context.
